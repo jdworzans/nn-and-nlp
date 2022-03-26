@@ -1,0 +1,10 @@
+name: nn-and-nlp
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - numpy=1.21.2=py39h20f2e39_0
+  - python=3.9.7=h12debd9_1
+  - pytorch=1.11.0=py3.9_cuda11.3_cudnn8.2.0_0
+  - torchaudio=0.11.0=py39_cu113
+  - torchvision=0.12.0=py39_cu113
