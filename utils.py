@@ -301,3 +301,44 @@ class ShapePrinter(nn.Module):
     def forward(self, x):
         print(x.shape)
         return x
+
+class BatchNorm2d(nn.Module):
+    def __init__(self, num_features, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True):
+        super().__init__()
+        self.num_features = num_features
+        self.eps = torch.as_tensor(eps)
+        self.momentum = torch.as_tensor(momentum)
+        self.affine = affine
+        self.track_running_stats = track_running_stats
+        if self.affine:
+            self.weight = nn.parameter.Parameter(torch.ones((1, self.num_features, 1, 1)))
+            self.bias = nn.parameter.Parameter(torch.zeros((1, self.num_features, 1, 1)))
+
+        if self.track_running_stats:
+            self.register_buffer("running_mean", torch.ones((1, self.num_features, 1, 1)))
+            self.register_buffer("running_var", torch.zeros((1, self.num_features, 1, 1)))
+            if self.momentum is None:
+                self.register_buffer("n", torch.as_tensor(0))
+
+    def forward(self, x):
+        if self.train or not self.track_running_stats:
+            batch_mean = x.mean((0, 2, 3), True)
+            batch_var = x.var((0, 2, 3), False, True)
+            if self.track_running_stats:
+                if self.momentum is not None:
+                    self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * batch_mean
+                    self.running_var = (1 - self.momentum) * self.running_var + self.momentum * batch_var
+                else:
+                    self.running_mean = self.running_mean * (self.n / (self.n + 1)) + batch_mean / (self.n + 1)
+                    self.running_var = self.running_var * (self.n / (self.n + 1)) + batch_var / (self.n + 1)
+                    self.n += 1
+
+        else:
+            batch_mean = self.running_mean
+            batch_var = self.running_var
+
+        y = (x - batch_mean) / torch.sqrt(batch_var + self.eps)
+
+        if self.affine:
+            return self.weight * y + self.bias
+        return y
