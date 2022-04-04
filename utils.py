@@ -70,6 +70,7 @@ class InMemDataLoader(object):
         sampler=None,
         batch_sampler=None,
         drop_last=False,
+        transform=None,
     ):
         """A torch dataloader that fetches data from memory."""
         batches = []
@@ -108,6 +109,7 @@ class InMemDataLoader(object):
 
         self.sampler = sampler
         self.batch_sampler = batch_sampler
+        self.transform = transform
         self.__initialized = True
 
     def __setattr__(self, attr, val):
@@ -121,7 +123,11 @@ class InMemDataLoader(object):
 
     def __iter__(self):
         for batch_indices in self.batch_sampler:
-            yield self.dataset[batch_indices]
+            if self.transform is None:
+                yield self.dataset[batch_indices]
+            else:
+                x, y = self.dataset[batch_indices]
+                yield self.transform(x), y
 
     def __len__(self):
         return len(self.batch_sampler)
