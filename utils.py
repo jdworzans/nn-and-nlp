@@ -255,14 +255,22 @@ def SGD(
                 param[...] = best_param
     plot_history(history)
 
+
 class Dropout(nn.Module):
-    def __init__(self, p=0.5, inplace=False):
+    def __init__(self, p=0.5):
         super().__init__()
         self.p = p
-        self.inplace = inplace
+        self.dist = torch.distributions.Bernoulli(self.p)
+        self.factor = 1 / (1 - self.p)
+        self.zero = torch.Tensor([0])
     
     def forward(self, x):
-        return F.dropout(x, self.p, self.training, inplace=self.inplace)
+        if self.training:
+            out = self.factor * x
+            mask = (self.dist.sample(x.size()) == 1)
+            out[mask] = 0
+            return out
+        return x
 
 class Model(nn.Module):
     def __init__(self, *args, **kwargs):
@@ -279,3 +287,11 @@ class Model(nn.Module):
 class Model2D(Model):
     def forward(self, X):
         return self.layers.forward(X)
+
+class ShapePrinter(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        print(x.shape)
+        return x
