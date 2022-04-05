@@ -145,6 +145,7 @@ def SGD(
     epsilon=0.0,
     decay=0.0,
     norm_constraint=None,
+    polyak_averaging=None,
     num_epochs=1,
     max_num_epochs=np.nan,
     patience_expansion=1.5,
@@ -161,6 +162,11 @@ def SGD(
 
     # Problem 1.3: Initialize momentum variables
     velocities = [torch.zeros_like(p) for p in model.parameters()]
+
+    if polyak_averaging is not None:
+        avg_named_parameters = {name: torch.clone(p).detach() for name, p in model.named_parameters()}
+        for p_avg in avg_named_parameters.values():
+            p_avg.requires_grad = False
 
     # Problem 1.2: Schedule learning rate
     try:
@@ -240,17 +246,29 @@ def SGD(
                     )
                     tstart = time.time()
 
-            val_err_rate = compute_error_rate(
-                model, data_loaders["valid"], device)
-            history["val_errs"].append((iter_, val_err_rate))
+            with torch.no_grad():
+                if polyak_averaging is not None:
+                    state_dict = model.state_dict()
+                    avg_state_dict = state_dict.copy()
+                    avg_named_parameters = {name: polyak_averaging * p_avg + (1 - polyak_averaging) * state_dict[name] for name, p_avg in avg_named_parameters.items()}
+                    avg_state_dict.update(avg_named_parameters)
+                    model.load_state_dict(avg_state_dict)
 
-            if val_err_rate < best_val_err:
-                # Adjust num of epochs
-                num_epochs = int(np.maximum(
-                    num_epochs, epoch * patience_expansion + 1))
-                best_epoch = epoch
-                best_val_err = val_err_rate
-                best_params = [p.detach().cpu() for p in model.parameters()]
+                val_err_rate = compute_error_rate(
+                    model, data_loaders["valid"], device)
+                history["val_errs"].append((iter_, val_err_rate))
+
+                if val_err_rate < best_val_err:
+                    # Adjust num of epochs
+                    num_epochs = int(np.maximum(
+                        num_epochs, epoch * patience_expansion + 1))
+                    best_epoch = epoch
+                    best_val_err = val_err_rate
+                    best_params = [p.detach().cpu() for p in model.parameters()]
+
+                if polyak_averaging is not None:
+                    model.load_state_dict(state_dict)
+
             clear_output(True)
             m = "After epoch {0: >2} | valid err rate: {1: >5.2f}% | doing {2: >3} epochs".format(
                 epoch, val_err_rate * 100.0, num_epochs
