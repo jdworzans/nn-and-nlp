@@ -144,6 +144,7 @@ def SGD(
     alpha=1e-4,
     epsilon=0.0,
     decay=0.0,
+    norm_constraint=None,
     num_epochs=1,
     max_num_epochs=np.nan,
     patience_expansion=1.5,
@@ -217,6 +218,12 @@ def SGD(
 
                         v[...] = epsilon * v - alpha * p.grad
                         p += v
+
+                        if "weight" in name and norm_constraint is not None:
+                            norms = torch.linalg.norm(p, dim=list(range(1, p.dim())), keepdim=True)
+                            mask = (norms > norm_constraint).squeeze()
+                            p[mask] /= norms[mask]
+
 
                         # Zero gradients for the next iteration
                         p.grad.zero_()
