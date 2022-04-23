@@ -5,6 +5,7 @@ import numpy as np
 import PIL
 import scipy.io
 import torch
+import torch.nn.functional as F
 import torchvision
 from torch.autograd import Variable
 
@@ -110,3 +111,79 @@ class VGGPreprocess(torch.nn.Module):
             stds = stds.cuda()
         x = (x - Variable(means)) / Variable(stds)
         return x
+
+class VGG(torch.nn.Module):
+    """Wrapper around a VGG network allowing convenient extraction of layer activations."""
+
+    FEATURE_LAYER_NAMES = {
+        "vgg16": [
+            "conv1_1", "relu1_1", "conv1_2", "relu1_2", "pool1", "conv2_1", "relu2_1", "conv2_2",
+            "relu2_2", "pool2", "conv3_1", "relu3_1", "conv3_2", "relu3_2", "conv3_3", "relu3_3",
+            "pool3", "conv4_1", "relu4_1", "conv4_2", "relu4_2", "conv4_3", "relu4_3", "pool4",
+            "conv5_1", "relu5_1", "conv5_2", "relu5_2", "conv5_3", "relu5_3", "pool5",
+        ],
+        "vgg19": [
+            "conv1_1", "relu1_1", "conv1_2", "relu1_2", "pool1", "conv2_1", "relu2_1", "conv2_2",
+            "relu2_2", "pool2", "conv3_1", "relu3_1", "conv3_2", "relu3_2", "conv3_3", "relu3_3",
+            "conv3_4", "relu3_4", "pool3", "conv4_1", "relu4_1", "conv4_2", "relu4_2", "conv4_3",
+            "relu4_3", "conv4_4", "relu4_4", "pool4", "conv5_1", "relu5_1", "conv5_2", "relu5_2",
+            "conv5_3", "relu5_3", "conv5_4", "relu5_4", "pool5",
+        ],
+    }
+
+    def __init__(self, model="vgg19"):
+        super(VGG, self).__init__()
+        all_models = {"vgg16": torchvision.models.vgg16, "vgg19": torchvision.models.vgg19}
+        vgg = all_models[model](pretrained=True)
+
+        self.preprocess = VGGPreprocess()
+        self.features = vgg.features
+        self.classifier = vgg.classifier
+        self.softmax = torch.nn.Softmax(dim=-1)
+
+        self.feature_names = self.FEATURE_LAYER_NAMES[model]
+
+        assert len(self.feature_names) == len(self.features)
+
+    def forward(self, x):
+        """ Return pre-softmax unnormalized logits. 
+        """
+        x = self.preprocess(x)
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
+        return x
+
+    def probabilities(self, x):
+        """Return class probabilities.
+        """
+        logits = self(x)
+        return F.softmax(logits, dim=-1)
+
+    def layer_activations(self, x, layer_name):
+        """Return activations of a selected layer.
+        """
+        x = self.preprocess(x)
+        for name, layer in zip(self.feature_names, self.features):
+            x = layer(x)
+            if name == layer_name:
+                return x
+        raise ValueError("Layer %s not found" % layer_name)
+
+    def multi_layer_activations(self, x, layer_names):
+        """Return activations of all requested layers.
+        """
+        pass # TODO implement me
+
+    def predict(self, x):
+        """Return predicted class IDs.
+        """
+        logits = self(x)
+        return logits.argmax(-1)
+
+vgg_transform = torchvision.transforms.Compose(
+    [torchvision.transforms.Resize(256), torchvision.transforms.CenterCrop(224)])
+
+def load_image(filepath: str) -> np.ndarray:
+    img = vgg_transform(PIL.Image.open(filepath).convert("RGB"))
+    return np.asarray(img).astype("float32") / 255.0
