@@ -173,7 +173,14 @@ class VGG(torch.nn.Module):
     def multi_layer_activations(self, x, layer_names):
         """Return activations of all requested layers.
         """
-        pass # TODO implement me
+        x = self.preprocess(x)
+        results = {}
+        for name, layer in zip(self.feature_names, self.features):
+            x = layer(x)
+            if name in layer_names:
+                results[name] = x
+        return [results[layer_name] for layer_name in layer_names]
+
 
     def predict(self, x):
         """Return predicted class IDs.
